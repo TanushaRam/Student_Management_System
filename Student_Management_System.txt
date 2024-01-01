@@ -1,0 +1,1031 @@
+     <<...STUDENT MANAGEMENT SYSTEM...>>
+                                      --CHEKKAPALLLI TANUSHA (20EM10515)
+
+*^DEVICES & OS SPECIFICATIONS^*
+
+DEVICE_NAME     :LAPTOP-TEFNDSQF
+Processor       :Intel(R) Core(TM) i5-10300H CPU @ 2.50GHz   2.50 GHz
+Installed RAM   : 8.00 GB (7.84 GB usable)
+Edition Windows : Windows 11 Home Single Language  
+SYSTEM_TYPE     :64-bit operating system, x64-based processor
+Version         :22H2
+
+
+
+*^REQUIREMENTS^* :
+
+--> Java 17
+-->
+--> Spring Tool Suite (Backend)
+--> React.js (Frontend)
+
+
+*^CREATING A SPRING STARTER PROJECT^* :
+
+-->Project name- Student_Management_System
+-->Root package name- com.tanu
+-->Project type- Maven
+-->Packing- JAR
+-->Language: Java
+-->Java version: 17
+-->Spring Boot Version: 
+
+*^DEPENDENCIES^* :
+
+-->Lombok
+-->Spring web
+-->Spring Data JPA
+-->MySQL Driver
+
+-->Converting application.properties file and adding the required credentials(DB_Name, username in mysql,,DB_password) to integrate our spring application to the database.
+*^CONFIGURE DATABASE CONNECTION:
+
+
+server:
+  port: 9192
+
+spring:
+  datasource:
+    username: root
+    password: admin@123
+    url: jdbc:mysql://localhost:3306/sbr_db
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+      format_sql: true
+
+
+-->creating a model package in the src/main/java
+-->in the model package I am creating a classes for representing the structure of data in my application.
+
+
+
+-->Student class contains attributes including:
+    -id : auto generated
+    -firstname: student roll number
+    -lastname: student name
+    -department: student department
+    -email: unique identifier decided by the student
+
+............................................................................................................................................................................................
+
+STUDENT CLASS:-
+
+
+package com.tanu.sbrdemo.model;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.NaturalId;
+
+
+@Entity
+@Setter
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public class Student {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String firstName;
+    private String lastName;
+    @NaturalId(mutable = true)
+    private String email;
+    private String department;
+}
+
+
+-->Create an StudentRepository interface extending JpaRepository<Student, Long> to handle CRUD operations.
+
+
+package com.tanu.sbrdemo.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.tanu.sbrdemo.model.Student;
+
+import java.util.Optional;
+@Repository
+
+public interface StudentRepository extends JpaRepository<Student, Long> {
+    Optional<Student> findByEmail(String email);
+}
+
+............................................................................................................................................................................................
+
+
+--> IStundentService ::IStudentService is an interface that defines the contract for handling Student-related operations. It typically includes method signatures for CRUD functionalities.
+
+package com.tanu.sbrdemo.service;
+
+import java.util.List;
+
+import com.tanu.sbrdemo.model.Student;
+
+
+public interface IStudentService {
+    Student addStudent(Student student);
+    List<Student> getStudents();
+    Student updateStudent(Student student, Long id);
+    Student getStudentById(Long id);
+    void deleteStudent(Long id);
+}
+
+............................................................................................................................................................................................
+
+
+--> StudentService: StudentService is a class implementing the IStudentService interface. It contains the actual implementation of CRUD operations for Studnet.
+
+
+
+package com.tanu.sbrdemo.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import com.tanu.sbrdemo.exception.StudentAlreadyExistsException;
+import com.tanu.sbrdemo.exception.StudentNotFoundException;
+import com.tanu.sbrdemo.model.Student;
+import com.tanu.sbrdemo.repository.StudentRepository;
+
+import java.util.List;
+
+
+@Service
+@RequiredArgsConstructor
+public class StudentService implements IStudentService{
+    private final StudentRepository studentRepository;
+
+    @Override
+    public List<Student> getStudents() {
+        return studentRepository.findAll();
+    }
+    @Override
+    public Student addStudent(Student student) {
+        if (studentAlreadyExists(student.getEmail())){
+            throw  new StudentAlreadyExistsException(student.getEmail()+ " already exists!");
+        }
+        return studentRepository.save(student);
+    }
+
+
+    @Override
+    public Student updateStudent(Student student, Long id) {
+        return studentRepository.findById(id).map(st -> {
+            st.setFirstName(student.getFirstName());
+            st.setLastName(student.getLastName());
+            st.setEmail(student.getEmail());
+            st.setDepartment(student.getDepartment());
+            return studentRepository.save(st);
+        }).orElseThrow(() -> new StudentNotFoundException("Sorry, this student could not be found"));
+    }
+
+    @Override
+    public Student getStudentById(Long id) {
+        return studentRepository.findById(id)
+                .orElseThrow(() -> new StudentNotFoundException("Sorry, no student found with the Id :" +id));
+    }
+
+    @Override
+    public void deleteStudent(Long id) {
+        if (!studentRepository.existsById(id)){
+            throw new StudentNotFoundException("Sorry, student not found");
+        }
+        studentRepository.deleteById(id);
+    }
+    private boolean studentAlreadyExists(String email) {
+        return studentRepository.findByEmail(email).isPresent();
+    }
+}
+
+
+
+-StudentService uses StudentRepository to perform database operations (CRUD) related to Students.
+
+-@Service annotation marks it as a service component in Spring for automatic component scanning and dependency injection.
+
+-Each method (getStudents, addstudent, updateStudent, deleteStudent) contains logic for handling respective CRUD operations on Student using the repository.
+
+-By implementing the SService based on the IStudentService interface, you establish a clean separation of concerns, allowing for easy unit testing and maintainability in your Spring Boot application. Adjust the implementation as needed based on your specific requirements and business logic.
+
+
+............................................................................................................................................................................................
+
+
+ Create StudentController class:
+     -Design an StudentController to handle HTTP requests..
+
+
+package com.tanu.sbrdemo.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import com.tanu.sbrdemo.model.Student;
+import com.tanu.sbrdemo.service.IStudentService;
+
+import java.util.List;
+
+
+@CrossOrigin("http://localhost:3000") 
+@RestController
+@RequestMapping("/students")
+@RequiredArgsConstructor
+public class StudentController {
+    private final IStudentService studentService;
+    @GetMapping
+    public ResponseEntity<List<Student>> getStudents(){
+        return new ResponseEntity<>(studentService.getStudents(), HttpStatus.FOUND);
+    }
+    @PostMapping
+    public Student addStudent(@RequestBody Student student){
+        return studentService.addStudent(student);
+    }
+    @PutMapping("/update/{id}")
+    public Student updateStudent(@RequestBody Student student, @PathVariable Long id){
+        return studentService.updateStudent(student, id);
+    }
+    @DeleteMapping("/delete/{id}")
+    public void deleteStudent(@PathVariable Long id){
+        studentService.deleteStudent(id);
+    }
+    @GetMapping("/student/{id}")
+    public Student getStudentById(@PathVariable Long id){
+        return studentService.getStudentById(id);
+    }
+
+
+}
+
+ ***Exception Handling***
+
+StudentAlreadyExistsException:
+
+package com.tanusha.studentdemo.exception;
+public class StudentAlreadyExistsException extends RuntimeException {
+    public StudentAlreadyExistsException(String message) {
+        super(message);
+    }
+}
+StudentNotFoundException :
+
+package com.tanusha.studentdemo.exception;
+
+public class StudentNotFoundException extends RuntimeException {
+    public StudentNotFoundException(String message) {
+        super(message);
+    }
+}
+
+............................................................................................................................................................................................
+
+Controller class:
+ In Spring Boot, the controller class is responsible for processing incoming REST API requests, preparing a model, and returning the view to be rendered as a response. The controller classes in Spring are annotated either by the @Controller or the @RestController annotation.
+
+
+@RestController:
+ The @RestController annotation is a specialized version of the  @Controller  annotation. It is used to indicate that the class defines a RESTful API endpoint.
+ When you annotate a class with @RestController, it implies that every method inside the class is treated as a controller method and returns the response in a format suitable for RESTful services (typically JSON).
+@RequestMapping:
+ The @RequestMapping annotation is used to map web requests to specific methods in a controller class. It can be applied at the class level and/or method level.
+ It allows you to define the base URL for all the methods in the class and then further refine the URI for each method.
+ It can specify the HTTP method (GET, POST, PUT, DELETE) and other request parameters
+
+ Then after run the application. As default the application will run on port 8080 in Apache Tomcat server.But, here I can change my Port in Application properties by server.port:9192
+
+
+-->Testing CRUD Operations with Postman
+
+
+@GetMapping:(Read Operation)
+•  This annotation here it retrives all the students data ,,, this is the URL: " http://localhost:9192/students "
+
+ @PostMapping:(Create Operation)
+ This annotation used for adding a new  studnt "http://localhost:9192/students"
+
+
+@PutMapping:(Update Operation )
+
+ This annotation maps the HTTP PUT request to the "http://localhost:9192/students/update/33" URI. It is used for updating Studnetdetails ..
+
+@DeleteMapping:(Delete Operation)
+
+ This Annotation used for deleting a student based on their Id ......http://localhost:9192/students/delete/{id} wwhere {id} is the ID of the Student to be deleted
+
+
+
+->>Frontend Overview:
+
+>Technologies Used:
+*React.js: A JavaScript library for building user interfaces.
+*React Router: Used for handling routing within the React application version "react-dom": "^18.2.0".
+*Axios: A promise-based HTTP client for making requests to the backend API version "axios": "^1.6.2".
+*Bootstarp: It is a css framework version "bootstrap": "^5.3.2"
+
+1.Setting up React App:
+>Use Create React App or any preferred method to set up your React application.
+>If using Create React App, you can create a new app by running:
+*npx create-react-app my-react-app
+*cd 
+
+2.Install Axios or Use Fetch API:
+>Axios is a popular JavaScript library that simplifies making HTTP requests.
+>To install Axios, 
+*run:npm install axios( axios: "^1.6.2")
+
+3.Develop Frontend Components:
+
+***NavBar component:***
+-->The NavBar component creates a navigation bar for easy access to different sections of the application.
+
+
+import React from "react";
+import { Link } from "react-router-dom";
+
+const NavBar = () => {
+	return (
+		<nav className="navbar navbar-expand-lg navbar-dark bg-dark mb-5">
+			<div className="container-fluid">
+				<Link className="navbar-brand" to={"/"}>
+					SBR Demo
+				</Link>
+				<button
+					className="navbar-toggler"
+					type="button"
+					data-bs-toggle="collapse"
+					data-bs-target="#navbarNav"
+					aria-controls="navbarNav"
+					aria-expanded="false"
+					aria-label="Toggle navigation">
+					<span className="navbar-toggler-icon"></span>
+				</button>
+				<div
+					className="collapse navbar-collapse"
+					id="navbarNav">
+					<ul className="navbar-nav">
+						<li className="nav-item">
+							<Link
+								className="nav-link active"
+								aria-current="page"
+								to={"/view-students"}>
+								View All Student
+							</Link>
+						</li>
+						<li className="nav-item">
+							<Link
+								className="nav-link"
+								to={"/add-students"}>
+								Add new Students
+							</Link>
+						</li>
+					</ul>
+				</div>
+			</div>
+		</nav>
+	);
+};
+
+export default NavBar;
+
+***AddStudent Component:***
+
+-->The AddStudent component allows users to add new employees by making POST requests to the backend API.
+
+
+
+import { useState } from "react";
+import {
+	Link,
+	useNavigate,
+} from "react-router-dom";
+import axios from "axios";
+
+const AddStudent = () => {
+	let navigate = useNavigate();
+	const [student, setStudent] = useState({
+		firstName: "",
+		lastName: "",
+		email: "",
+		department: "",
+	});
+	const {
+		firstName,
+		lastName,
+		email,
+		department,
+	} = student;
+
+	const handleInputChange = (e) => {
+		setStudent({
+			...student,
+			[e.target.name]: e.target.value,
+		});
+	};
+	const saveStudent = async (e) => {
+		e.preventDefault();
+		await axios.post(
+			"http://localhost:9192/students",
+			student
+		);
+		navigate("/view-students");
+	};
+
+	return (
+		<div className="col-sm-8 py-2 px-5 offset-2 shadow">
+			<h2 className="mt-5"> Add Student</h2>
+			<form onSubmit={(e) => saveStudent(e)}>
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="fristName">
+						First Name
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="text"
+						name="firstName"
+						id="firstName"
+						required
+						value={firstName}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="lastName">
+						Last Name
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="text"
+						name="lastName"
+						id="lastName"
+						required
+						value={lastName}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="email">
+						Your Email
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="email"
+						name="email"
+						id="email"
+						required
+						value={email}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="department">
+						Department
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="text"
+						name="department"
+						id="department"
+						required
+						value={department}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="row mb-5">
+					<div className="col-sm-2">
+						<button
+							type="submit"
+							className="btn btn-outline-success btn-lg">
+							Save
+						</button>
+					</div>
+
+					<div className="col-sm-2">
+						<Link
+							to={"/view-students"}
+							type="submit"
+							className="btn btn-outline-warning btn-lg">
+							Cancel
+						</Link>
+					</div>
+				</div>
+			</form>
+		</div>
+	);
+};
+
+export default AddStudent;
+
+****EditStudent component:****
+
+
+import React, {
+	useEffect,
+	useState,
+} from "react";
+import axios from "axios";
+
+import {
+	Link,
+	useNavigate,
+	useParams,
+} from "react-router-dom";
+
+const EditStudent = () => {
+	let navigate = useNavigate();
+
+	const { id } = useParams();
+
+	const [student, setStudent] = useState({
+		firstName: "",
+		lastName: "",
+		email: "",
+		department: "",
+	});
+	const {
+		firstName,
+		lastName,
+		email,
+		department,
+	} = student;
+
+	useEffect(() => {
+		loadStudent();
+	}, []);
+
+	const loadStudent = async () => {
+		const result = await axios.get(
+			`http://localhost:9192/students/student/${id}`
+		);
+		setStudent(result.data);
+	};
+
+	const handleInputChange = (e) => {
+		setStudent({
+			...student,
+			[e.target.name]: e.target.value,
+		});
+	};
+	const updateStudent = async (e) => {
+		e.preventDefault();
+		await axios.put(
+			`http://localhost:9192/students/update/${id}`,
+			student
+		);
+		navigate("/view-students");
+	};
+
+	return (
+		<div className="col-sm-8 py-2 px-5 offset-2 shadow">
+			<h2 className="mt-5"> Edit Student</h2>
+			<form onSubmit={(e) => updateStudent(e)}>
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="fristName">
+						First Name
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="text"
+						name="firstName"
+						id="firstName"
+						required
+						value={firstName}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="lastName">
+						Last Name
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="text"
+						name="lastName"
+						id="lastName"
+						required
+						value={lastName}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="email">
+						Your Email
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="email"
+						name="email"
+						id="email"
+						required
+						value={email}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="input-group mb-5">
+					<label
+						className="input-group-text"
+						htmlFor="department">
+						Department
+					</label>
+					<input
+						className="form-control col-sm-6"
+						type="text"
+						name="department"
+						id="department"
+						required
+						value={department}
+						onChange={(e) => handleInputChange(e)}
+					/>
+				</div>
+
+				<div className="row mb-5">
+					<div className="col-sm-2">
+						<button
+							type="submit"
+							className="btn btn-outline-success btn-lg">
+							Save
+						</button>
+					</div>
+
+					<div className="col-sm-2">
+						<Link
+							to={"/view-students"}
+							type="submit"
+							className="btn btn-outline-warning btn-lg">
+							Cancel
+						</Link>
+					</div>
+				</div>
+			</form>
+		</div>
+	);
+};
+
+export default EditStudent;
+
+
+
+LoginForm Component:
+
+import React, { useState } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+
+const LoginForm = () => {
+  const navigate=useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleUsernameChange = (event) => {
+    setUsername(event.target.value);
+  };
+
+  const handlePasswordChange = (event) => {
+    setPassword(event.target.value);
+  };
+  const handleLogout = () => {
+    // Perform any logout-related actions, clear authentication state, etc.
+    // For simplicity, we'll just navigate to the login page.
+    navigate('/login');
+  };
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    
+    try {
+      // Make a request to your backend for authentication
+      const response = await axios.get(`http://localhost:9192/Login/${username}/${password}`, {
+        username,
+        password,
+      });
+      
+      // Handle the response, for example, redirect to another page on successful login
+      if(response.data==='Login succesfull')
+      {
+          navigate('/view-students');
+      }
+    } catch (error) {
+      // Handle errors, for example, display an error message
+      console.error('Login failed:', error.message);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Login</h2>
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '15px' }}>
+          <label htmlFor="username">Username:</label>
+          <input
+            type="text"
+            id="username"
+            value={username}
+            onChange={handleUsernameChange}
+            style={{ backgroundColor: '#FFDAB9' }} // Light peach color
+          />
+        </div>
+        <div style={{ marginBottom: '15px' }}>
+          <label htmlFor="password">Password:</label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={handlePasswordChange}
+            style={{ backgroundColor: '#FFDAB9' }} // Light peach color
+          />
+        </div>
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  );
+};
+
+export default LoginForm;
+
+
+StudentPofile component:
+
+
+import React, {
+	useEffect,
+	useState,
+} from "react";
+import { useParams } from "react-router-dom";
+import axios from "axios";
+
+const StudentPofile = () => {
+	const { id } = useParams();
+
+	const [student, setStudent] = useState({
+		firstName: "",
+		lastName: "",
+		email: "",
+		department: "",
+	});
+
+	useEffect(() => {
+		loadStudent();
+	}, []);
+
+	const loadStudent = async () => {
+		const result = await axios.get(
+			`http://localhost:9192/students/student/${id}`
+		);
+		setStudent(result.data);
+	};
+
+	return (
+		<section
+			className="shadow"
+			style={{ backgroundColor: "whitesmoke" }}>
+			<div className="container py-5">
+				<div className="row">
+					<div className="col-lg-3">
+						<div className="card mb-4">
+							<div className="card-body text-center">
+								<img
+									src="https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava3.webp"
+									alt="avatar"
+									className="rounded-circle img-fluid"
+									style={{ width: 150 }}
+								/>
+								<h5 className="my-3">
+									{`${student.firstName} ${student.lastName}`}
+								</h5>
+								<div className="d-flex justify-content-center mb-2">
+									<button
+										type="button"
+										className="btn btn-outline-primary">
+										Call
+									</button>
+									<button
+										type="button"
+										className="btn btn-outline-warning ms-1">
+										Message
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div className="col-lg-9">
+						<div className="card mb-4">
+							<div className="card-body">
+								<hr />
+
+								<div className="row">
+									<div className="col-sm-3">
+										<h5 className="mb-0">
+											First Nmae
+										</h5>
+									</div>
+
+									<div className="col-sm-9">
+										<p className="text-muted mb-0">
+											{student.firstName}
+										</p>
+									</div>
+								</div>
+
+								<hr />
+
+								<div className="row">
+									<div className="col-sm-3">
+										<h5 className="mb-0">
+											Last Name
+										</h5>
+									</div>
+
+									<div className="col-sm-9">
+										<p className="text-muted mb-0">
+											{student.lastName}
+										</p>
+									</div>
+								</div>
+								<hr />
+
+								<div className="row">
+									<div className="col-sm-3">
+										<h5 className="mb-0">
+											Email
+										</h5>
+									</div>
+
+									<div className="col-sm-9">
+										<p className="text-muted mb-0">
+											{student.email}
+										</p>
+									</div>
+								</div>
+								<hr />
+
+								<div className="row">
+									<div className="col-sm-3">
+										<h5 className="mb-0">
+											Department
+										</h5>
+									</div>
+
+									<div className="col-sm-9">
+										<p className="text-muted mb-0">
+											{student.department}
+										</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+	);
+};
+
+export default StudentPofile;
+
+
+StudentsView 
+import React, {
+	useEffect,
+	useState,
+} from "react";
+import axios from "axios";
+import {
+	FaEdit,
+	FaEye,
+	FaTrashAlt,
+} from "react-icons/fa";
+import { Link } from "react-router-dom";
+import Search from "../common/Search";
+
+const StudentsView = () => {
+	const [students, setStudents] = useState([]);
+	const [search, setSearch] = useState("");
+
+	useEffect(() => {
+		loadStudents();
+	}, []);
+
+	const loadStudents = async () => {
+		const result = await axios.get(
+			"http://localhost:9192/students",
+			{
+				validateStatus: () => {
+					return true;
+				},
+			}
+		);
+		if (result.status === 302) {
+			setStudents(result.data);
+		}
+	};
+
+	const handleDelete = async (id) => {
+		await axios.delete(
+			`http://localhost:9192/students/delete/${id}`
+		);
+		loadStudents();
+	};
+
+	return (
+		<section>
+			<Search
+				search={search}
+				setSearch={setSearch}
+			/>
+			<table className="table table-bordered table-hover shadow">
+				<thead>
+					<tr className="text-center">
+						<th>ID</th>
+						<th>First Name</th>
+						<th>Last Name</th>
+						<th>Email</th>
+						<th>Depatment</th>
+						<th colSpan="3">Actions</th>
+					</tr>
+				</thead>
+
+				<tbody className="text-center">
+					{students
+						.filter((st) =>
+							st.firstName
+								.toLowerCase()
+								.includes(search)
+						)
+						.map((student, index) => (
+							<tr key={student.id}>
+								<th scope="row" key={index}>
+									{index + 1}
+								</th>
+								<td>{student.firstName}</td>
+								<td>{student.lastName}</td>
+								<td>{student.email}</td>
+								<td>{student.department}</td>
+								<td className="mx-2">
+									<Link
+										to={`/student-profile/${student.id}`}
+										className="btn btn-info">
+										<FaEye />
+									</Link>
+								</td>
+								<td className="mx-2">
+									<Link
+										to={`/edit-student/${student.id}`}
+										className="btn btn-warning">
+										<FaEdit />
+									</Link>
+								</td>
+								<td className="mx-2">
+									<button
+										className="btn btn-danger"
+										onClick={() =>
+											handleDelete(student.id)
+										}>
+										<FaTrashAlt />
+									</button>
+								</td>
+							</tr>
+						))}
+				</tbody>
+			</table>
+		</section>
+	);
+};
+
+export default StudentsView;
+
+
+
+
